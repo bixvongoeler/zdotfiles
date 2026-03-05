@@ -1,0 +1,11 @@
+quickgit() {
+    if [ -z "$1" ]; then
+        message="update-$(date +%Y%m%d-%H%M)"
+    else
+        message="$1"
+    fi
+
+    git add .
+    git commit -a -m "$message"
+    git push
+}

@@ -1,0 +1,21 @@
+invert_pdf() {
+    if [[ $# -ne 1 ]]; then
+        echo "Usage: invert_pdf <input.pdf>"
+        return 1
+    fi
+
+    local input="$1"
+    if [[ ! -f "$input" ]]; then
+        echo "Error: File '$input' not found."
+        return 1
+    fi
+
+    # Remove the .pdf extension (if present) to form the output filename.
+    local base="${input%.pdf}"
+    local output="${base}_inverted.pdf"
+
+    # Run the ImageMagick command:
+    magick -density 300 "$input" -negate "$output"
+
+    echo "Inverted PDF saved as '$output'"
+}

@@ -1,0 +1,10 @@
+color-test-256() {
+    echo '** \033[38;5;5m256 Color Reference\033[0m **\nUse format: (\\033 or \\x1b)\n - \\033[38;5;<num>m (foreground)\n - \\033[48;5;<num>m (background)'
+    echo 'Ranges:\n - 0-15: Standard+Bright\n - 16-231: 6×6×6 RGB (36*R + 6*G + B + 16)\n - 232-255: Grayscale'
+    echo 'Common:\n - Black=0 Red=1 Green=2 Yellow=3 Blue=4 Magenta=5 Cyan=6 White=7\n - Reset=\033[0m'
+    echo ""
+    for i in {0..255}; do
+        printf "\033[38;5;${i}m%3d\033[0m " "$i"
+        [ $((($i + 1) % 16)) -eq 0 ] && echo
+    done
+}

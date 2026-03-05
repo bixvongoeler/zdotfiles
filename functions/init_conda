@@ -1,0 +1,3 @@
+init_conda() {
+    eval "$(conda "shell.$(basename "${SHELL}")" hook)"
+}

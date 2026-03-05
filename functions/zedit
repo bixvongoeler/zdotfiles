@@ -1,0 +1,3 @@
+zedit() {
+    /opt/homebrew/bin/zed-preview $1
+}
