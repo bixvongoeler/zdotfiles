@@ -3,9 +3,10 @@
 #
 
 # Apps
-export EDITOR=nano
-export VISUAL=zed-preview
+export EDITOR="zed-preview --wait"
+export VISUAL="zed-preview --wait"
 export PAGER=less
+
 
 # Misc exports
 export TESSDATA_PREFIX=$HOMEBREW_PREFIX/share/tessdata/
