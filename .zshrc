@@ -15,7 +15,8 @@ fi
 ZSH_CONFIG_DIR="${ZDOTDIR:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh}"
 ZSH_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/zsh"
 ZSH_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
-mkdir -p $ZSH_CONFIG_DIR $ZSH_DATA_DIR $ZSH_CACHE_DIR
+export TMPDIR="${XDG_CACHE_HOME:-$HOME/.cache}/tmp"
+mkdir -p $ZSH_CONFIG_DIR $ZSH_DATA_DIR $ZSH_CACHE_DIR $TMPDIR
 
 # Set Zsh Options
 setopt EXTENDED_GLOB INTERACTIVE_COMMENTS
@@ -25,14 +26,17 @@ fpath=($ZSH_CONFIG_DIR/completions $fpath)
 
 # --- Autoload Functions --- #
 # Each file in functions/ becomes a lazy-loaded function (loaded on first call)
+# Skips _* (completion/helper files stay on fpath only) and *.md (docs).
 for _fndir in $ZSH_CONFIG_DIR/functions(/FN) $ZSH_CONFIG_DIR/functions/*(/FN); do
     fpath=($_fndir $fpath)
-    autoload -Uz $_fndir/*~*/_*(N.:t)
+    autoload -Uz $_fndir/*~*/_*~*.md(N.:t)
 done
 unset _fndir
 
 # --- Zinit Plugin Manager --- #
 source $ZSH_CONFIG_DIR/lib/zinit.zsh
+
+# GITSTATUS_LOG_LEVEL=DEBUG
 
 # --- Source conf.d --- #
 # Each file handles one concern: aliases, history, keybindings, tools, etc.
@@ -51,3 +55,6 @@ unset _rc
 [[ -v ZPROFRC ]] && unset ZPROFRC
 
 true
+
+# To customize prompt, run `p10k configure` or edit ~/.config/zsh/.p10k_config.zsh.
+# [[ ! -f ~/.config/zsh/.p10k_config.zsh ]] || source ~/.config/zsh/.p10k_config.zsh

@@ -1,0 +1,3 @@
+#!/usr/bin/env zsh
+# gln — git log for the last N commits.  See `gln -h`.  (autoloaded; body-only)
+gl_run count "$@"

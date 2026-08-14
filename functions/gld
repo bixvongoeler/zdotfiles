@@ -1,0 +1,3 @@
+#!/usr/bin/env zsh
+# gld — git log for the last N days.  See `gld -h`.  (autoloaded; body-only)
+gl_run days "$@"

@@ -3,13 +3,11 @@
 #
 
 # Apps
-export EDITOR="zed-preview --wait"
-export VISUAL="zed-preview --wait"
+export EDITOR="zed --wait"
+export VISUAL="zed --wait"
 export PAGER=less
-
-
-# Misc exports
-export TESSDATA_PREFIX=$HOMEBREW_PREFIX/share/tessdata/
+export MANPAGER="sh -c 'col -bx | batcat -l man -p'"
+export MANROFFOPT="-c"   # avoids overstrike artifacts in recent groff
 
 # Auto-deduplicate PATH entries
 typeset -U path
@@ -17,7 +15,6 @@ typeset -U path
 # Set the list of directories that cd searches.
 cdpath=(
     $XDG_PROJECTS_DIR(N/)
-    $HOME/tufts_dev(N/)
     $cdpath
 )
 
@@ -25,14 +22,5 @@ cdpath=(
 path=(
     $HOME/.local/bin(N)
     $HOME/.cargo/bin(N)
-    $HOMEBREW_PREFIX/opt/rustup/bin(N)
-    $HOMEBREW_PREFIX/opt/llvm/bin(N)
-
     $path
-
-    $HOME/.platformio/packages/toolchain-gccarmnoneeabi/bin(N)
-    $HOME/.platformio/penv/bin(N)
-    $HOMEBREW_PREFIX/opt/curl/bin(N)
-    $HOMEBREW_PREFIX/opt/go/libexec/bin(N)
-    $HOMEBREW_PREFIX/share/npm/bin(N)
 )

@@ -23,3 +23,5 @@
 .zlocal
 .misc
 cmdk
+.docs/reference-zdotdir/
+.docs/zinit-wiki/

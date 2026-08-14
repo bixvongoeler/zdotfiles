@@ -24,8 +24,13 @@ zinit ice depth=1
 zinit light romkatv/powerlevel10k
 
 # --- LS_COLORS --- #
-alias dircolors='gdircolors'
-zinit ice atclone"gdircolors -b LS_COLORS > clrs.zsh" \
+# alias dircolors='gdircolors'
+# zinit ice atclone"dircolors -b LS_COLORS > clrs.zsh; echo 'LS_COLORS=\"ow=34;40:\${LS_COLORS}\"' >> clrs.zsh" \
+#     atpull'%atclone' pick"clrs.zsh" nocompile'!' \
+#     atload'zstyle ":completion:*" list-colors "${(s.:.)LS_COLORS}"'
+# zinit light trapd00r/LS_COLORS
+
+zinit ice atclone"dircolors -b LS_COLORS > clrs.zsh" \
     atpull'%atclone' pick"clrs.zsh" nocompile'!' \
     atload'zstyle ":completion:*" list-colors "${(s.:.)LS_COLORS}"'
 zinit light trapd00r/LS_COLORS
@@ -34,11 +39,10 @@ typeset -g ZSH_HIGHLIGHT_MAXLENGTH=300
 # --- Turbo-loaded Plugins --- #
 # These load after the prompt is drawn (wait = after first prompt).
 zinit wait lucid for \
-    atinit"ZINIT[COMPINIT_OPTS]=-C; zicompinit; zicdreplay" \
+    atinit"ZINIT[COMPINIT_OPTS]=-C; zicompinit; zicdreplay; compdef _batcat bat" \
     zdharma-continuum/fast-syntax-highlighting \
     atclone"_fix-omz-plugin" \
     OMZP::colored-man-pages \
-    OMZP::macos \
     blockf \
     zsh-users/zsh-completions \
     atload"!_zsh_autosuggest_start" \
@@ -46,6 +50,8 @@ zinit wait lucid for \
 
 zinit ice wait lucid
 zinit light Aloxaf/fzf-tab
+
+# zstyle ':completion:*:directory' list-colors "ow=34;40"
 
 zinit ice wait lucid
 zinit load zdharma-continuum/history-search-multi-word
