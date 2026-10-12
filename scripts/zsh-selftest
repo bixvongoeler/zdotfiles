@@ -1,0 +1,272 @@
+#!/usr/bin/env zsh
+#
+# zsh-selftest - check this zsh config on the Mac and on ssh hosts
+#
+# usage: scripts/zsh-selftest [-z DIR] [-f] [-t] [-b DIR] [host ...]
+#
+#   host    "local" (the default), or an ssh host alias such as orb or um870
+#   -z DIR  config to test, as a path on the target (default: this checkout
+#           for local, ~/.config/zsh on ssh hosts); $HOME expands on the target
+#   -f      fresh: copy the config into a throwaway HOME on the target and test
+#           a first start there (zinit and the plugins install from scratch)
+#   -t      also time 10 interactive startups (median, in milliseconds)
+#   -b DIR  with -t, also time the config in DIR, as a baseline
+#
+# Runs on the Mac: tmux drives real terminal sessions (through ssh -t for
+# remote hosts) and sends the byte sequences iTerm2 sends for each key.
+# Prints PASS/FAIL per check; the exit status is the number of failures.
+#
+
+emulate -L zsh
+setopt extended_glob
+autoload -Uz is-at-least
+
+local here=${0:A:h:h} zdir= base= fresh=0 timing=0
+local -a hosts
+while (( $# )); do
+    case $1 in
+        -z) zdir=$2; shift ;;
+        -b) base=$2; shift ;;
+        -f) fresh=1 ;;
+        -t) timing=1 ;;
+        -h|--help) sed -n '3,19s/^# \{0,1\}//p' $0; return 0 ;;
+        -*) print -u2 "zsh-selftest: unknown option: $1"; return 2 ;;
+        *) hosts+=($1) ;;
+    esac
+    shift
+done
+(( $+commands[tmux] )) || { print -u2 "zsh-selftest: needs tmux"; return 2 }
+
+local sock=zsh-selftest-$$ host Z R T envset launch res line mode k w a p
+integer fails=0 hostfails darwin i ok n
+local -A r
+
+pass() { print -r -- "  PASS  $1" }
+fail() { print -r -- "  FAIL  $1${2:+  ($2)}"; (( ++fails, ++hostfails )) }
+check() { [[ $2 == $3 ]] && pass "$1" || fail "$1" "got '$2', want '$3'" }
+has() { [[ -n $r[cmd:$1] ]] }
+
+# Run a command on the target, without a terminal
+on() {
+    if [[ $host == local ]]; then
+        zsh -fc "setopt extended_glob; $1"
+    else
+        ssh -o BatchMode=yes -o ConnectTimeout=10 $host "setopt extended_glob; $1"
+    fi
+}
+
+tm() { tmux -L $sock "$@" }
+send() { tm send-keys -t zst "$@" }
+screen() { tm capture-pane -p -J -S - -t zst 2>/dev/null }
+wait_for() {  # pattern seconds
+    local j
+    for (( j = 0; j < $2 * 4; j++ )); do
+        screen | grep -q -- $1 && return 0
+        sleep 0.25
+    done
+    return 1
+}
+
+# Keystroke tests: typed after ": aaa bbb ccc", as the hex bytes iTerm2
+# (natural text editing) sends; want = CURSOR|BUFFER afterwards.
+local -a keytests=(
+    'opt+left'          '1b 62'                 '10|: aaa bbb ccc'
+    'opt+right'         '01 1b 66'              '2|: aaa bbb ccc'
+    'cmd+left'          '01'                    '0|: aaa bbb ccc'
+    'cmd+right'         '01 05'                 '13|: aaa bbb ccc'
+    'ctrl+left'         '1b 5b 31 3b 35 44'     '10|: aaa bbb ccc'
+    'ctrl+right'        '01 1b 5b 31 3b 35 43'  '2|: aaa bbb ccc'
+    'opt+left (CSI)'    '1b 5b 31 3b 33 44'     '10|: aaa bbb ccc'
+    'opt+right (CSI)'   '01 1b 5b 31 3b 33 43'  '2|: aaa bbb ccc'
+    'ctrl+backspace'    '08'                    '10|: aaa bbb '
+    'opt+backspace'     '1b 7f'                 '10|: aaa bbb '
+    'cmd+backspace'     '15'                    '0|'
+    'backspace'         '7f'                    '12|: aaa bbb cc'
+)
+
+for host in ${hosts:-local}; do
+    hostfails=0
+    print -r -- "== $host"
+    if [[ $host == local ]]; then
+        Z=${zdir:-$here} R=${TMPDIR:-/tmp}/zsh-selftest.$$
+    else
+        Z=${zdir:-'$HOME/.config/zsh'} R=/tmp/zsh-selftest.$$
+    fi
+
+    T=
+    if (( fresh )); then
+        T=$(on "T=\$(mktemp -d \${TMPDIR:-/tmp}/zsh-fresh.XXXXXX) && mkdir -p \$T/.config &&
+                cp -R $Z \$T/.config/zsh &&
+                rm -rf \$T/.config/zsh/(.git|.zsh_history|.zcompdump*|.misc|.zsecret|*.local)(N) &&
+                ln -s \$T/.config/zsh/.zshenv \$T/.zshenv && print -r -- \$T") || T=
+        if [[ $T != */zsh-fresh.* ]]; then
+            fail "fresh HOME on $host" "$T"
+            continue
+        fi
+        Z=$T/.config/zsh
+        envset="env -i HOME=$T USER=\$USER LOGNAME=\$USER PATH=\$PATH TERM=xterm-256color LANG=\${LANG:-en_US.UTF-8}"
+        print -r -- "  (fresh HOME: $T)"
+    else
+        envset="env TERM=xterm-256color ZDOTDIR=$Z"
+    fi
+
+    # --- No terminal: syntax, and the shapes Zed and `ssh host cmd` use --- #
+    res=$(on "for f in $Z/.zshenv $Z/.zprofile $Z/.zshrc $Z/conf.d/*.zsh $Z/lib/*.zsh \
+                       $Z/functions/*~*.md(.N) $Z/scripts/*(.N); do
+                  zsh -n \$f 2>&1 || print -r -- \"in \$f\"
+              done" 2>&1)
+    [[ -z $res ]] && pass "syntax (zsh -n)" || fail "syntax (zsh -n)" "$res"
+
+    for mode in '-l' '-l -i'; do
+        res=$(on "$envset zsh $mode -c 'print -r -- OK' </dev/null >$R.o 2>$R.e
+                  print -r -- \"rc=\$?\"; print -r -- '--o'; cat $R.o; print -r -- '--e'; cat $R.e
+                  rm -f $R.o $R.e" 2>&1)
+        local rc=${${(M)${(f)res}:#rc=*}#rc=}
+        local so=${${res#*--o$'\n'}%%$'\n'--e*}
+        local se=${${res#*--e}#$'\n'}
+        [[ $rc == 0 && $so == OK && -z $se ]] && pass "no terminal, zsh $mode: silent" \
+            || fail "no terminal, zsh $mode: silent" "rc=$rc out=${(q)so} err=${(q)se}"
+    done
+
+    # --- Real terminal sessions --- #
+    # The first start installs plugins on a fresh HOME and writes p10k's
+    # instant prompt cache; the second start, with that cache, is the one
+    # checked in detail (instant prompt changes what startup sees).
+    if [[ $host == local ]]; then
+        launch="$envset zsh -l"
+    else
+        launch="TERM=xterm-256color ssh -t -o BatchMode=yes $host ${(qq):-$envset zsh -l}"
+    fi
+    ok=1
+    for line in "first start" "second start"; do
+        tm kill-server 2>/dev/null
+        if ! tm new-session -d -s zst -x 220 -y 50 "$launch"; then
+            fail "$line: tmux session"; ok=0; break
+        fi
+        send -l 'print -r -- @@$((6*7))READY'; send Enter
+        if ! wait_for '@@42READY' $(( fresh ? 240 : 30 )); then
+            fail "$line: reaches a prompt" "${(j: / :)${(f)$(screen | tail -5)}}"; ok=0; break
+        fi
+        pass "$line: reaches a prompt"
+        n=0
+        for (( i = 0; i < (fresh ? 90 : 15); i++ )); do
+            send -l 'print -r -- @@$((6*7))T$+functions[fzf-tab-complete]'; send Enter
+            wait_for '@@42T1' 2 && { n=1; break }
+        done
+        (( n )) && pass "$line: turbo plugins load" || fail "$line: turbo plugins load"
+        res=$(screen | grep -v '@@' | grep -E -i 'command not found|no such file|parse error|bad pattern|not an identifier|unknown option|bad option|failed|error')
+        [[ -z $res ]] && pass "$line: no errors on screen" || fail "$line: no errors on screen" "${(j: / :)${(f)res}}"
+        screen | grep -q 'Console output during zsh initialization' \
+            && fail "$line: no p10k instant prompt warning" || pass "$line: no p10k instant prompt warning"
+        [[ $line == "second start" ]] && break   # keep this session for the checks
+        send -l 'exit'; send Enter; sleep 1
+    done
+    if (( ! ok )); then
+        tm kill-server 2>/dev/null
+        continue
+    fi
+
+    send -l "rm -f $R; source $Z/scripts/selftest-checks.zsh $R; print -r -- @@\$((6*7))CHECKED"; send Enter
+    wait_for '@@42CHECKED' 30 || fail "selftest-checks.zsh ran"
+    for k w a in $keytests; do
+        send -l ': aaa bbb ccc'
+        send -H ${=w}
+        send C-x C-t
+        send C-u
+    done
+    if (( timing )); then
+        send -l "TIMEFMT=%mE; { repeat 10 { time ( zsh -lic exit ) } } 2>$R.time${base:+; \
+{ repeat 10 { time ( ZDOTDIR=$base zsh -lic exit ) } } 2>$R.btime}; print -r -- @@\$((6*7))TIMED"
+        send Enter
+        wait_for '@@42TIMED' 600 || fail "timing finished"
+    fi
+    sleep 1
+    send -l 'exit'; send Enter
+    sleep 1
+    tm kill-server 2>/dev/null
+
+    res=$(on "cat $R; [[ ! -r $R.time ]] || print -r -- \"time=\$(tr '\n' ' ' < $R.time)\"
+              [[ ! -r $R.btime ]] || print -r -- \"btime=\$(tr '\n' ' ' < $R.btime)\"
+              rm -f $R $R.time $R.btime")
+    r=()
+    for line in ${(f)res}; do r[${line%%=*}]=${line#*=}; done
+    darwin=0; [[ $r[os] == darwin* ]] && darwin=1
+
+    # --- Keymap and key bindings --- #
+    check "keymap is emacs" "$r[keymap]" "bindkey -A emacs main"
+    for k w in '^R' fzf-history-widget '^T' fzf-file-widget '^[c' fzf-cd-widget '^O' cd_config \
+               '^I' fzf-tab-zed-complete '^[b' backward-word '^[f' forward-word \
+               '^A' beginning-of-line '^E' end-of-line '^[[1;3D' backward-word '^[[1;3C' forward-word \
+               '^[[1;5D' backward-word '^[[1;5C' forward-word '^H' backward-kill-word \
+               '^[^?' backward-kill-word '^U' kill-whole-line \
+               '^P' history-search-backward '^N' history-search-forward; do
+        check "bind $k" "$r[bind:$k]" $w
+    done
+    n=0
+    for k w a in $keytests; do
+        check "key $k" "$r[dump:$(( ++n ))]" $a
+    done
+
+    # --- Plugins --- #
+    for p in romkatv/powerlevel10k trapd00r/LS_COLORS zdharma-continuum/fast-syntax-highlighting \
+             zsh-users/zsh-completions zsh-users/zsh-autosuggestions Aloxaf/fzf-tab; do
+        [[ " $r[plugins] " == *" $p "* ]] && pass "plugin $p" || fail "plugin $p" "loaded: $r[plugins]"
+    done
+    [[ $r[plugins] != *history-search-multi-word* ]] && pass "no history-search-multi-word" \
+        || fail "no history-search-multi-word"
+    # colored: OMZP::colored-man-pages; ofd: OMZP::macos, which loads only on macOS
+    for k w in p10k 1 fzf-tab-complete 1 _zsh_autosuggest_start 1 _zsh_highlight 1 colored 1 \
+               fzf-history-widget 1 ofd $darwin; do
+        check "function $k" "$r[fn:$k]" $w
+    done
+    (( ${r[list-colors]:-0} > 10 )) && pass "completion list-colors ($r[list-colors])" \
+        || fail "completion list-colors" "$r[list-colors] entries"
+    check "zoxide where installed" "$r[fn:z]" $(has zoxide && print 1 || print 0)
+    check "OSC 52 pbcopy only over ssh without a pbcopy" "$r[fn:pbcopy]" \
+        $([[ -n $r[ssh] ]] && ! has pbcopy && print 1 || print 0)
+
+    # --- Aliases and functions --- #
+    for a in l la lla lt ltd lsl lss; do
+        check "alias $a" "$r[whence:$a]" $(has lsd && print alias || print none)
+    done
+    check "ls" "$r[whence:ls]" $(has lsd && print alias || print command)
+    check "vim" "$r[whence:vim]" $(has nvim && print alias || print command)
+    check "bat" "$r[whence:bat]" $(has bat && print command || { has batcat && print alias || print none })
+    for a in gs n c; do check "alias $a" "$r[whence:$a]" alias; done
+    for a in gld gln zedit fif y cd_config; do check "function $a" "$r[whence:$a]" function; done
+
+    # --- Environment --- #
+    w=nano
+    (( darwin )) && [[ -z $r[ssh] ]] && has zed-preview && w="zed-preview --wait"
+    check "EDITOR" "$r[env:EDITOR]" $w
+    check "VISUAL" "$r[env:VISUAL]" $w
+    w=; has batcat && w=batcat; has bat && w=bat
+    if [[ -n $w ]]; then
+        check "PAGER" "$r[env:PAGER]" "$w -p"
+        check "BAT_PAGER" "$r[env:BAT_PAGER]" less
+        check "BAT_THEME" "$r[env:BAT_THEME]" OneHalfDark
+        check "MANPAGER" "$r[env:MANPAGER]" "sh -c 'col -bx | $w -l man -p'"
+    else
+        check "PAGER (no bat)" "$r[env:PAGER]" less
+    fi
+    check "LESS" "$r[env:LESS]" '-R -F -i -M -J -W --mouse --incsearch'
+    check "LESSHISTFILE" "$r[env:LESSHISTFILE]" "$r[env:XDG_STATE_HOME]/less/history"
+    check "HISTFILE" "$r[env:HISTFILE]" "$r[env:ZDOTDIR]/.zsh_history"
+    check "skip_global_compinit" "$r[env:skip_global_compinit]" 1
+    [[ $r[env:TMPDIR] != */.cache/tmp ]] && pass "TMPDIR left to the system" || fail "TMPDIR left to the system" "$r[env:TMPDIR]"
+    check "no duplicate PATH entries" "$r[path-dups]" 0
+    check "direnv hooked once where installed" "$r[direnv-hooks]" $(has direnv && print 1 || print 0)
+    is-at-least 0.48 ${r[fzf-version]:-0} && pass "fzf $r[fzf-version] supports --zsh" \
+        || fail "fzf supports --zsh" "version '$r[fzf-version]'"
+    print -r -- "  info  COLORTERM=$r[env:COLORTERM] TERM=$r[env:TERM] LANG=$r[env:LANG] XDG_RUNTIME_DIR=$r[env:XDG_RUNTIME_DIR]"
+    w=; for k in ${(o)r[(I)cmd:*]}; do [[ -n $r[$k] ]] || w+=" ${k#cmd:}"; done
+    print -r -- "  info  not installed:${w:- none}"
+
+    if (( timing )); then
+        local -a t=(${(on)${=r[time]}%ms}) b=(${(on)${=r[btime]}%ms})
+        (( $#t )) && print -r -- "  time  median ${t[$(( ($#t + 1) / 2 ))]} ms (10 runs)${b:+, baseline ${b[$(( ($#b + 1) / 2 ))]} ms}"
+    fi
+    [[ -z $T ]] || on "rm -rf ${(q)T}"
+    print -r -- "  -- $host: $hostfails failed"
+done
+return $fails
