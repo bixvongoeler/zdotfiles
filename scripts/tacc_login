@@ -1,0 +1,24 @@
+#!/usr/bin/env zsh
+
+export PATH="/opt/homebrew/bin:$PATH"
+
+# Reuse an existing multiplexed connection: no token needed
+if ssh -O check stampede3 &>/dev/null; then
+    exec ssh stampede3 "$@"
+fi
+
+# Print an error, wait for a keypress so the message stays visible, then exit.
+die() {
+    print -u2 "ERROR: $1"
+    read -sk1 "?Press any key to close..."
+    exit 1
+}
+
+(($+commands[op])) || die "1password-cli not installed"
+
+SSHPASS=$(op item get tacc --otp) || die "failed to get TACC token"
+
+[[ "$SSHPASS" =~ '^[0-9]{6}$' ]] || die "TACC token is not a 6-digit code"
+
+export SSHPASS
+exec sshpass -e -P "TACC Token Code:" ssh stampede3 "$@"

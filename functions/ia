@@ -1,0 +1,12 @@
+#!/usr/bin/env zsh
+# ia: open iA Writer application
+
+# ia: open iA Writer application
+ia() {
+    if [[ "$OSTYPE" != darwin* ]]; then
+        print -u2 "Error: iA Writer is only available on macOS."
+        return 1
+    fi
+
+    open -a "iA Writer" "$@"
+}

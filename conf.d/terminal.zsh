@@ -2,7 +2,7 @@
 
 case "${TERM_PROGRAM:l}" in
 ghostty)
-    source ${GHOSTTY_RESOURCES_DIR}/shell-integration/zsh/ghostty-integration
+    # source ${GHOSTTY_RESOURCES_DIR}/shell-integration/zsh/ghostty-integration
     ;;
 iTerm.app)
     test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"

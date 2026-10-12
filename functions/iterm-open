@@ -1,0 +1,264 @@
+#!/usr/bin/env zsh
+#
+# iterm-open (ito): open an iTerm2 window, tab, or split pane with a profile,
+# cd'd into a directory, optionally over ssh.
+#
+# Works both as an autoloaded function (from this folder) and as a script
+# (symlinked into ~/.local/bin as iterm-open and ito), so it uses
+# local/return and never exit. Completion: $ZDOTDIR/completions/_iterm-open
+#
+
+emulate -L zsh
+setopt extended_glob
+
+# --- Config --- #
+local -a profiles=(dev tufts_dev orb_dev stampede3_dev)
+local default_profile=dev
+# ssh host -> profile that already connects to it (Command: SSH in iTerm)
+local -A ssh_profiles=(orb orb_dev tufts tufts_dev stampede3 stampede3_dev)
+local prompt_timeout=60 # seconds to wait for a remote prompt (MFA etc.)
+
+local k map=
+for k in ${(ok)ssh_profiles}; map+="      ${(r:10:)k} -> $ssh_profiles[$k]"$'\n'
+
+local usage="usage: iterm-open [flags] [dir]      (or: ito)
+
+Open an iTerm2 window, tab, or split pane with a profile, cd'd into dir
+(default: the current directory; with --ssh, wherever the session starts:
+the profile's start dir for ssh profiles, else the remote home).
+
+Where:
+  -w, --win                 new window (default)
+  -t, --tab                 new tab in the current window
+  -r, --right, --horiz      split the current pane, new pane to the right
+  -v, --vert                split the current pane, new pane below
+                            (tab and splits open a window if none exists)
+What:
+  -p, --profile <name>      iTerm2 profile: ${(j:, :)profiles} (default: $default_profile)
+  -s, --ssh <host>          ssh to a host from ~/.ssh/config
+  -d, --dir <dir>           start directory; same as the [dir] argument
+  -c, --cmd <command>       run a command after cd'ing; the shell stays open
+Other:
+  -n, --dry-run             show what would be opened and typed, do nothing
+  -h, --help                show this help
+
+Short flags can be combined: -tv, -rp orb_dev, -pdev.
+
+SSH:
+  These hosts open in their own profile, which does the ssh itself:
+${map}  Choosing one of those profiles with -p implies its host, so
+  'ito -p orb_dev dev' is the same as 'ito -s orb dev'.
+  Other hosts ssh from the chosen profile (default: $default_profile); a RemoteCommand
+  in ~/.ssh/config (e.g. 'zsh -l') becomes the remote shell.
+
+  With an ssh profile, the cd and --cmd are typed once the remote prompt
+  shows up (waits up to ${prompt_timeout}s, e.g. for MFA). This needs the profile's
+  \"Load shell integration automatically\" setting.
+
+  Remote dirs are relative to the remote home. '~/x', ~/x left unquoted (your
+  shell turns it into \$HOME/x), and 'x' all mean the remote ~/x. Remote
+  variables expand on the remote side if you single-quote them: '\$SCRATCH/run1'.
+
+Examples:
+  ito ~/dev/proj                 window at ~/dev/proj, dev profile
+  ito -t -c nvim .               new tab here, open nvim
+  ito -r -s orb dev/project1     split right, orb_dev, cd ~/dev/project1
+  ito -v -s tufts cs105          split below, tufts_dev, cd ~/cs105
+  ito -t -s stampede3 '\$SCRATCH' new tab, stampede3_dev, cd \$SCRATCH
+  ito -n -s orb -c make dev/x    dry run: show what would be typed"
+
+# --- Parse arguments --- #
+local mode=window profile= host= dir= run= dry=0
+local -a positional
+
+while (( $# )); do
+    case $1 in
+        -w|--win)              mode=window ;;
+        -t|--tab)              mode=tab ;;
+        -r|--right|--horiz)    mode=right ;;
+        -v|--vert)             mode=below ;;
+        -p|--profile|-s|--ssh|-d|--dir|-c|--cmd)
+            if [[ -z $2 ]]; then
+                print -u2 "iterm-open: $1 requires an argument"
+                return 1
+            fi
+            case $1 in
+                -p|--profile) profile=$2 ;;
+                -s|--ssh)     host=$2 ;;
+                -d|--dir)     dir=$2 ;;
+                -c|--cmd)     run=$2 ;;
+            esac
+            shift
+            ;;
+        --profile=*)  profile=${1#*=} ;;
+        --ssh=*)      host=${1#*=} ;;
+        --dir=*)      dir=${1#*=} ;;
+        --cmd=*)      run=${1#*=} ;;
+        -n|--dry-run) dry=1 ;;
+        -h|--help)    print -r -- $usage; return 0 ;;
+
+        # Hidden: used by the completion so the lists live in one place.
+        --list-profiles) print -rl -- $profiles; return 0 ;;
+        --list-ssh-profiles)
+            for k in ${(ok)ssh_profiles}; print -r -- "$k=$ssh_profiles[$k]"
+            return 0
+            ;;
+        --list-hosts)
+            # Host aliases from ~/.ssh/config, following Include (OrbStack's
+            # orb lives in ~/.orbstack/ssh/config); wildcard patterns skipped.
+            local -a files=(~/.ssh/config) hosts words
+            local f inc line
+            while (( $#files )); do
+                f=$files[1]; shift files
+                [[ -r $f ]] || continue
+                for line in "${(@f)$(<$f)}"; do
+                    words=(${=line//=/ }) # "Key=value" is valid too
+                    case ${words[1]:l} in
+                        host) hosts+=(${words[2,-1]:#*[*?!]*}) ;;
+                        include)
+                            for inc in $words[2,-1]; do
+                                [[ $inc == \~/* ]] && inc=$HOME/${inc#\~/}
+                                [[ $inc == /* ]] || inc=$HOME/.ssh/$inc
+                                files+=(${~inc}(N)) # Include allows globs
+                            done
+                            ;;
+                    esac
+                done
+            done
+            print -rl -- ${(ou)hosts}
+            return 0
+            ;;
+
+        --) shift; positional+=("$@"); break ;;
+        -[^-]?*) # bundled short flags: -tv -> -t -v, -pdev -> -p dev
+            if [[ $1 == -[psdc]* ]]; then
+                set -- ${1[1,2]} ${1[3,-1]} "${@[2,-1]}"
+            else
+                set -- ${1[1,2]} -${1[3,-1]} "${@[2,-1]}"
+            fi
+            continue
+            ;;
+        -*) print -u2 "iterm-open: unknown option: $1 (see --help)"; return 1 ;;
+        *)  positional+=("$1") ;;
+    esac
+    shift
+done
+
+if (( $#positional > 1 )); then
+    print -u2 "iterm-open: too many arguments: $positional"
+    return 1
+elif [[ -n $dir && $#positional -eq 1 ]]; then
+    print -u2 "iterm-open: give the directory either with -d or as an argument, not both"
+    return 1
+fi
+[[ -n $dir ]] || dir=$positional[1]
+
+# --- Resolve profile and host --- #
+# An ssh profile implies its host; a host with its own profile implies that
+# profile. Either way the profile does the ssh, not us.
+local via_profile=0 implied
+if [[ -n $profile ]]; then
+    implied=${(k)ssh_profiles[(re)$profile]}
+    if [[ -n $implied ]]; then
+        if [[ -n $host && $host != $implied ]]; then
+            print -u2 "iterm-open: profile $profile already connects to $implied, not $host"
+            return 1
+        fi
+        host=$implied
+        via_profile=1
+    fi
+elif [[ -n $host && -n $ssh_profiles[$host] ]]; then
+    profile=$ssh_profiles[$host]
+    via_profile=1
+fi
+[[ -n $profile ]] || profile=$default_profile
+
+# --- Build the text to type into the new session --- #
+local text= wait=0
+if [[ -z $host ]]; then
+    # zsh doesn't expand ~ after --dir=, so do it here (~ and ~/... only)
+    [[ $dir == \~(|/*) ]] && dir=$HOME${dir#\~}
+    dir=${${dir:-$PWD}:a}
+    if [[ ! -d $dir ]]; then
+        print -u2 "iterm-open: not a directory: $dir"
+        return 1
+    fi
+    text="cd ${(q)dir} && clear${run:+ && $run}"
+else
+    # An unquoted ~/x was already expanded locally; map it back to remote ~/x.
+    [[ $dir == $HOME(|/*) ]] && dir=\~${dir#$HOME}
+    # Relative paths are anchored at ~/ since ssh profiles may start elsewhere
+    # (orb_dev opens windows in ~/dev). Double quotes so remote variables
+    # expand there ($SCRATCH, $WORK).
+    local rcd= q=\"
+    case $dir in
+        ('')     ;; # no dir: stay where the session/profile starts
+        (\~)     rcd="cd ~" ;;
+        ([/\$]*) rcd="cd $q${dir//$q/\\$q}$q" ;;
+        (*)      dir=${dir#\~/}; rcd="cd ~/$q${dir//$q/\\$q}$q" ;;
+    esac
+
+    if (( via_profile )); then
+        # Typed into the remote shell once its prompt shows, so nothing ends
+        # up in an MFA/password prompt. clear hides the typed command.
+        if [[ -n $rcd || -n $run ]]; then
+            text="${rcd:+$rcd && }clear${run:+ && $run}"
+            wait=1
+        fi
+    else
+        # ssh refuses a RemoteCommand from ssh_config plus our command, so
+        # override it and exec it as the final shell (e.g. tufts: tcsh login).
+        local login="$(ssh -G $host 2>/dev/null | awk '$1 == "remotecommand" { $1 = ""; sub(/^ /, ""); print }')"
+        [[ -n $login && $login != none ]] || login='$SHELL -l'
+        local remote="${rcd:+$rcd && }clear; ${run:+$run; }exec $login"
+        text="ssh -t -o RemoteCommand=none ${(q)host} ${(q)remote}"
+    fi
+fi
+
+if (( dry )); then
+    print -r -- "open:    $mode"
+    print -r -- "profile: $profile"
+    (( via_profile )) && print -r -- "ssh:     $host (done by the profile)"
+    if [[ -n $text ]]; then
+        print -r -- "type:    $text${${wait:#0}:+   (after the remote prompt)}"
+    fi
+    return 0
+fi
+
+# --- Open it --- #
+osascript - "$mode" "$profile" "$text" "$wait" "$prompt_timeout" <<'EOF'
+on run argv
+    set mode to item 1 of argv
+    set profileName to item 2 of argv
+    set shellCmd to item 3 of argv
+    set waitForPrompt to (item 4 of argv is "1")
+    set timeoutSecs to (item 5 of argv) as number
+    tell application "iTerm2"
+        activate
+        try
+            if mode is "window" or (count of windows) is 0 then
+                set s to current session of (create window with profile profileName)
+            else if mode is "tab" then
+                tell current window to set t to (create tab with profile profileName)
+                set s to current session of t
+            else if mode is "right" then
+                tell current session of current window to set s to (split vertically with profile profileName)
+            else
+                tell current session of current window to set s to (split horizontally with profile profileName)
+            end if
+        on error errMsg
+            error "could not open profile \"" & profileName & "\": " & errMsg
+        end try
+        if shellCmd is "" then return
+        if waitForPrompt then
+            set waited to 0
+            repeat until (is at shell prompt of s)
+                if waited >= timeoutSecs then error "no shell prompt after " & timeoutSecs & "s; is \"Load shell integration automatically\" on for profile \"" & profileName & "\"?"
+                delay 0.25
+                set waited to waited + 0.25
+            end repeat
+        end if
+        tell s to write text shellCmd
+    end tell
+end run
+EOF

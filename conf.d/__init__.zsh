@@ -7,7 +7,6 @@ export EDITOR="zed-preview --wait"
 export VISUAL="zed-preview --wait"
 export PAGER=less
 
-
 # Misc exports
 export TESSDATA_PREFIX=$HOMEBREW_PREFIX/share/tessdata/
 
@@ -16,8 +15,8 @@ typeset -U path
 
 # Set the list of directories that cd searches.
 cdpath=(
-    $XDG_PROJECTS_DIR(N/)
-    $HOME/tufts_dev(N/)
+    # $XDG_PROJECTS_DIR(N/)
+    # $HOME/tufts_dev(N/)
     $cdpath
 )
 

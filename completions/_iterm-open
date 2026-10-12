@@ -1,0 +1,78 @@
+#compdef iterm-open ito
+
+# Lists come from iterm-open itself (--list-profiles / --list-ssh-profiles /
+# --list-hosts) so the profile list, host->profile map, and ssh-config
+# parsing live in one place.
+
+local context state state_descr line
+typeset -A opt_args
+
+# host=profile pairs for hosts whose iTerm profile does the ssh itself
+_iterm_open_ssh_profiles() {
+    _call_program ssh-profiles iterm-open --list-ssh-profiles 2>/dev/null
+}
+
+_iterm_open_profiles() {
+    local -a descr
+    local -A host_of
+    local kv p
+    for kv in ${(f)"$(_iterm_open_ssh_profiles)"}; do
+        host_of[${kv#*=}]=${kv%%=*}
+    done
+    for p in ${(f)"$(_call_program profiles iterm-open --list-profiles 2>/dev/null)"}; do
+        descr+=("${p//:/\\:}:${${host_of[$p]:+ssh $host_of[$p]}:-local}")
+    done
+    _describe -t profiles 'iTerm2 profile' descr
+}
+
+_iterm_open_hosts() {
+    local -a descr
+    local -A profile_of
+    local kv h
+    for kv in ${(f)"$(_iterm_open_ssh_profiles)"}; do
+        profile_of[${kv%%=*}]=${kv#*=}
+    done
+    for h in ${(f)"$(_call_program hosts iterm-open --list-hosts 2>/dev/null)"}; do
+        descr+=("${h//:/\\:}${profile_of[$h]:+:opens $profile_of[$h]}")
+    done
+    _describe -t hosts 'ssh host' descr
+}
+
+# Local dirs normally; remote dirs when -s is given or -p is an ssh profile.
+_iterm_open_dirs() {
+    local host=${opt_args[-s]:-$opt_args[--ssh]}
+    local profile=${opt_args[-p]:-$opt_args[--profile]}
+    local kv
+    if [[ -z $host && -n $profile ]]; then
+        for kv in ${(f)"$(_iterm_open_ssh_profiles)"}; do
+            [[ ${kv#*=} == $profile ]] && host=${kv%%=*}
+        done
+    fi
+    if [[ -z $host ]]; then
+        _directories
+        return
+    fi
+    # _remote_files strips most options from a bare "ssh" (incl. -o), but passes
+    # any other command through untouched, hence "command ssh". BatchMode makes
+    # password/MFA hosts fail fast; a live ControlMaster (stampede3) still works.
+    # Remote paths are relative to $HOME, so complete "~/..." as if relative.
+    compset -P '\~/'
+    _remote_files -/ -h "$host" -- command ssh -o BatchMode=yes -o ConnectTimeout=3 \
+        -o RemoteCommand=none -o RequestTTY=no -a -x ||
+        _message "remote directory on $host (relative to remote \$HOME)"
+}
+
+local modes='(-w --win -t --tab -r --right --horiz -v --vert)'
+
+_arguments -s -S \
+    "$modes"{-w,--win}'[open in a new window (default)]' \
+    "$modes"{-t,--tab}'[open in a new tab]' \
+    "$modes"{-r,--right,--horiz}'[split current pane, new pane to the right]' \
+    "$modes"{-v,--vert}'[split current pane, new pane below]' \
+    '(-p --profile)'{-p+,--profile=}'[iTerm2 profile]:profile:_iterm_open_profiles' \
+    '(-s --ssh)'{-s+,--ssh=}'[ssh host from ~/.ssh/config]:host:_iterm_open_hosts' \
+    '(-d --dir 1)'{-d+,--dir=}'[start directory]:directory:_iterm_open_dirs' \
+    '(-c --cmd)'{-c+,--cmd=}'[run a command after cd]:command:_cmdstring' \
+    '(-n --dry-run)'{-n,--dry-run}'[show what would be opened and typed]' \
+    '(- *)'{-h,--help}'[show help]' \
+    '(-d --dir)1:directory:_iterm_open_dirs'

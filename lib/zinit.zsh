@@ -34,7 +34,7 @@ typeset -g ZSH_HIGHLIGHT_MAXLENGTH=300
 # --- Turbo-loaded Plugins --- #
 # These load after the prompt is drawn (wait = after first prompt).
 zinit wait lucid for \
-    atinit"ZINIT[COMPINIT_OPTS]=-C; zicompinit; zicdreplay" \
+    atinit"ZINIT[COMPINIT_OPTS]=-C; zicompinit; zicdreplay; _comp_options+=(globdots)" \
     zdharma-continuum/fast-syntax-highlighting \
     atclone"_fix-omz-plugin" \
     OMZP::colored-man-pages \
@@ -44,7 +44,7 @@ zinit wait lucid for \
     atload"!_zsh_autosuggest_start" \
     zsh-users/zsh-autosuggestions
 
-zinit ice wait lucid
+zinit ice wait lucid atload'source $ZSH_CONFIG_DIR/lib/fzf-tab-icons.zsh; source $ZSH_CONFIG_DIR/lib/fzf-tab-zed.zsh'
 zinit light Aloxaf/fzf-tab
 
 zinit ice wait lucid

@@ -51,3 +51,4 @@ unset _rc
 [[ -v ZPROFRC ]] && unset ZPROFRC
 
 true
+export PATH="/opt/homebrew/opt/curl/bin:$PATH"
