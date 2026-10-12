@@ -11,4 +11,4 @@ export LESS='-R -F -i -M -J -W --mouse --incsearch'
 
 # Keep $HOME clean — less otherwise drops ~/.lesshst
 export LESSHISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/less/history"
-mkdir -p "$(dirname "$LESSHISTFILE")"
+[[ -d ${LESSHISTFILE:h} ]] || mkdir -p ${LESSHISTFILE:h}

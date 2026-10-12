@@ -3,7 +3,6 @@
 HISTSIZE=25000
 HISTFILE=$ZSH_CONFIG_DIR/.zsh_history
 SAVEHIST=$HISTSIZE
-HISTDUP=erase
 
 setopt appendhistory
 setopt sharehistory

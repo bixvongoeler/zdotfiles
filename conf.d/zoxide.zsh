@@ -1,9 +1,7 @@
 # --- zoxide ---
-# setup zoxide cd replacement
+# setup zoxide cd replacement (z, zi)
 
-installed_zoxide=$(command -v zoxide)
-
-if [[ -n "$installed_zoxide" ]]; then
+if (( $+commands[zoxide] )); then
     # configure zoxide through env vars
     export _ZO_ECHO='1'
 
