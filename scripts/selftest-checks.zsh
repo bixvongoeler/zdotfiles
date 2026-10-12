@@ -17,6 +17,7 @@ bindkey -M emacs '^X^T' _zst_dump
     local k v
     local -a colors
     local -aU upath=($path)
+    local -a dhooks=(${(M)precmd_functions:#_direnv_hook})
     {
         print -r -- "os=$OSTYPE"
         print -r -- "ssh=${SSH_CONNECTION:+1}"
@@ -35,6 +36,7 @@ bindkey -M emacs '^X^T' _zst_dump
         print -r -- "list-colors=${#colors}"
         for v in l ls la lla lt ltd lsl lss gs n c vim bat z gld gln zedit fif y cd_config; do
             print -r -- "whence:$v=${$(whence -w $v)#*: }"
+            print -r -- "alias:$v=${aliases[$v]-}"
         done
         for v in EDITOR VISUAL PAGER BAT_PAGER BAT_THEME MANPAGER LESS LESSHISTFILE COLORTERM \
                  LANG LC_ALL TERM ZDOTDIR TMPDIR XDG_STATE_HOME XDG_RUNTIME_DIR HISTFILE \
@@ -43,7 +45,7 @@ bindkey -M emacs '^X^T' _zst_dump
         done
         print -r -- "path=${(j.:.)path}"
         print -r -- "path-dups=$(( $#path - $#upath ))"
-        print -r -- "direnv-hooks=${#${(M)precmd_functions:#_direnv_hook}}"
+        print -r -- "direnv-hooks=$#dhooks"
         for v in lsd eza bat batcat fd fdfind fzf zoxide nvim nano direnv pyenv zed-preview pbcopy; do
             print -r -- "cmd:$v=${commands[$v]:-}"
         done

@@ -175,8 +175,9 @@ for host in ${hosts:-local}; do
         send C-u
     done
     if (( timing )); then
-        send -l "TIMEFMT=%mE; { repeat 10 { time ( zsh -lic exit ) } } 2>$R.time${base:+; \
-{ repeat 10 { time ( ZDOTDIR=$base zsh -lic exit ) } } 2>$R.btime}; print -r -- @@\$((6*7))TIMED"
+        line="TIMEFMT=%mE; { repeat 10 { time ( zsh -lic exit ) } } 2>$R.time"
+        [[ -z $base ]] || line+="; { repeat 10 { time ( ZDOTDIR=$base zsh -lic exit ) } } 2>$R.btime"
+        send -l "$line; print -r -- @@\$((6*7))TIMED"
         send Enter
         wait_for '@@42TIMED' 600 || fail "timing finished"
     fi
@@ -226,11 +227,15 @@ for host in ${hosts:-local}; do
         $([[ -n $r[ssh] ]] && ! has pbcopy && print 1 || print 0)
 
     # --- Aliases and functions --- #
-    for a in l la lla lt ltd lsl lss; do
-        check "alias $a" "$r[whence:$a]" $(has lsd && print alias || print none)
+    # Without lsd there's no lsd alias (NixOS has its own l and ls aliases)
+    for a in l ls la lla lt ltd lsl lss; do
+        if has lsd; then
+            [[ $r[alias:$a] == lsd* ]] && pass "alias $a uses lsd" || fail "alias $a uses lsd" "'$r[alias:$a]'"
+        else
+            [[ $r[alias:$a] != *lsd* ]] && pass "no lsd alias $a without lsd" || fail "no lsd alias $a without lsd" "'$r[alias:$a]'"
+        fi
     done
-    check "ls" "$r[whence:ls]" $(has lsd && print alias || print command)
-    check "vim" "$r[whence:vim]" $(has nvim && print alias || print command)
+    check "vim alias" "$r[alias:vim]" "$(has nvim && print nvim)"
     check "bat" "$r[whence:bat]" $(has bat && print command || { has batcat && print alias || print none })
     for a in gs n c; do check "alias $a" "$r[whence:$a]" alias; done
     for a in gld gln zedit fif y cd_config; do check "function $a" "$r[whence:$a]" function; done
