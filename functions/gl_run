@@ -1,0 +1,61 @@
+#!/usr/bin/env zsh
+# gl_run — shared worker for gld/gln (autoloaded; do NOT name with a leading
+# underscore or ~/.zshrc's `*~*/_*` glob will skip it).
+#   $1 = mode: "days" | "count"   |   remaining args = user input
+
+emulate -L zsh
+setopt local_options
+
+local mode="$1"; shift
+local cmdname unit
+if [[ "$mode" == days ]]; then cmdname="gld"; unit="days"; else cmdname="gln"; unit="commits"; fi
+
+local oneline=1 print_cmd=0 exclude=1 stat=0 n=""
+
+while (( $# )); do
+  case "$1" in
+    -h|--help)
+      print -r -- "${cmdname} <${unit}> [-F] [-P] [-U] [-S] [-h|--help]"
+      print -r -- "  logs the last <${unit}> ${unit} (graph, all refs, archive hidden)"
+      print -r -- "  -F  full format (drop --oneline)"
+      print -r -- "  -P  print the git command to stderr before running it"
+      print -r -- "  -U  unfiltered: include refs/archive/* (show all branches)"
+      print -r -- "  -S  add --stat"
+      print -r -- "  -h  this help"
+      return 0 ;;
+    -F) oneline=0 ;;
+    -P) print_cmd=1 ;;
+    -U) exclude=0 ;;
+    -S) stat=1 ;;
+    --) shift; break ;;
+    -*) print -u2 -r -- "${cmdname}: unknown flag: $1 (try ${cmdname} -h)"; return 2 ;;
+    *)  if [[ -n "$n" ]]; then
+          print -u2 -r -- "${cmdname}: too many arguments: already had <${unit}>=$n, got '$1'"; return 2
+        fi
+        n="$1" ;;
+  esac
+  shift
+done
+while (( $# )) && [[ -z "$n" ]]; do n="$1"; shift; done   # positional after `--`
+
+if [[ -z "$n" ]]; then
+  print -u2 -r -- "${cmdname}: missing <${unit}> argument (try ${cmdname} -h)"; return 2
+fi
+if [[ "$n" != <1-> ]]; then
+  print -u2 -r -- "${cmdname}: <${unit}> must be a positive integer, got '$n'"; return 2
+fi
+
+local -a cmd=(git log)
+(( oneline )) && cmd+=(--oneline)
+cmd+=(--decorate)
+(( exclude )) && cmd+=(--exclude='refs/archive/*')
+cmd+=(--all --graph)
+(( stat )) && cmd+=(--stat)
+if [[ "$mode" == days ]]; then
+  cmd+=(--after="${n} days ago")   # git approxidate; no `date` shell-out needed
+else
+  cmd+=(-n "$n")
+fi
+
+(( print_cmd )) && print -u2 -r -- "+ ${(j: :)${(q+)cmd[@]}}"
+"${cmd[@]}"
