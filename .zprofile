@@ -1,21 +1,24 @@
 #
 # .zprofile - runs second for login shells
 #
-# note: using .zprofile for machine specific configuration
+# Login shells: terminal windows, ssh sessions, tmux panes, and Zed reading
+# the environment. Machine-specific settings go in .zprofile.local.
 #
 
-# Homebrew shell environment
-eval "$(/opt/homebrew/bin/brew shellenv)"
+if [[ $OSTYPE == darwin* ]]; then
+    # Homebrew shell environment
+    [[ ! -x /opt/homebrew/bin/brew ]] || eval "$(/opt/homebrew/bin/brew shellenv)"
 
-# Setup Pyenv
-export PYENV_ROOT="$HOME/.pyenv"
-[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init - --no-rehash zsh)"
+    # OrbStack: command-line tools and integration (added by its installer)
+    [[ ! -r ~/.orbstack/shell/init.zsh ]] || source ~/.orbstack/shell/init.zsh
+fi
 
-# Load secret environment variables
-# test -e $ZDOTDIR/.zsecret && source $ZDOTDIR/.zsecret
-[[ -r $ZDOTDIR/.zsecret ]] && source $ZDOTDIR/.zsecret
+# pyenv shims for login shells that never read .zshrc; the full setup is in
+# conf.d/pyenv.zsh
+[[ ! -d ${PYENV_ROOT:-$HOME/.pyenv}/shims ]] || path=(${PYENV_ROOT:-$HOME/.pyenv}/shims $path)
 
-# Added by OrbStack: command-line tools and integration
-# This won't be added again if you remove it.
-source ~/.orbstack/shell/init.zsh 2>/dev/null || :
+# Load secret environment variables (gitignored)
+[[ ! -r $ZDOTDIR/.zsecret ]] || source $ZDOTDIR/.zsecret
+
+# Machine-specific login settings (gitignored)
+[[ ! -r $ZDOTDIR/.zprofile.local ]] || source $ZDOTDIR/.zprofile.local

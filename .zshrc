@@ -25,14 +25,19 @@ fpath=($ZSH_CONFIG_DIR/completions $fpath)
 
 # --- Autoload Functions --- #
 # Each file in functions/ becomes a lazy-loaded function (loaded on first call)
+# Skips _* (completion/helper files stay on fpath only) and *.md (docs).
 for _fndir in $ZSH_CONFIG_DIR/functions(/FN) $ZSH_CONFIG_DIR/functions/*(/FN); do
     fpath=($_fndir $fpath)
-    autoload -Uz $_fndir/*~*/_*(N.:t)
+    autoload -Uz $_fndir/*~*/_*~*.md(N.:t)
 done
 unset _fndir
 
-# --- Zinit Plugin Manager --- #
-source $ZSH_CONFIG_DIR/lib/zinit.zsh
+# --- Zinit Plugin Manager (terminal sessions only) --- #
+# The prompt and plugins need a terminal. Without one (Zed reading the
+# environment, `ssh host cmd`) skip them, so nothing prints and nothing waits.
+if [[ -t 0 && -t 1 ]]; then
+    source $ZSH_CONFIG_DIR/lib/zinit.zsh
+fi
 
 # --- Source conf.d --- #
 # Each file handles one concern: aliases, history, keybindings, tools, etc.
@@ -51,4 +56,3 @@ unset _rc
 [[ -v ZPROFRC ]] && unset ZPROFRC
 
 true
-export PATH="/opt/homebrew/opt/curl/bin:$PATH"
