@@ -6,6 +6,10 @@
 [[ "$ZPROFRC" -ne 1 ]] || zmodload zsh/zprof
 alias zprofrc="ZPROFRC=1 zsh"
 
+# Terminal session? Ask before the instant prompt below: it points stdin and
+# stdout away from the terminal until startup finishes.
+[[ -t 0 && -t 1 ]] && _zsh_tty=1 || _zsh_tty=
+
 # Init Powerlevel10k (Needs to happen first)
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
     source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
@@ -35,7 +39,7 @@ unset _fndir
 # --- Zinit Plugin Manager (terminal sessions only) --- #
 # The prompt and plugins need a terminal. Without one (Zed reading the
 # environment, `ssh host cmd`) skip them, so nothing prints and nothing waits.
-if [[ -t 0 && -t 1 ]]; then
+if [[ -n $_zsh_tty ]]; then
     source $ZSH_CONFIG_DIR/lib/zinit.zsh
 fi
 
