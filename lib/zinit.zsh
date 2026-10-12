@@ -39,7 +39,7 @@ zinit wait lucid for \
     zdharma-continuum/fast-syntax-highlighting \
     atclone"_fix-omz-plugin" \
     OMZP::colored-man-pages \
-    if'[[ $OSTYPE == darwin* ]]' \
+    if'[[ $OSTYPE == darwin* ]]' atclone"_fix-omz-plugin" \
     OMZP::macos \
     blockf \
     zsh-users/zsh-completions \
