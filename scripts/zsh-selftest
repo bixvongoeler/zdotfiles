@@ -195,8 +195,17 @@ for host in ${hosts:-local}; do
 
     # --- Keymap and key bindings --- #
     check "keymap is emacs" "$r[keymap]" "bindkey -A emacs main"
-    for k w in '^R' fzf-history-widget '^T' fzf-file-widget '^[c' fzf-cd-widget '^O' cd_config \
-               '^I' fzf-tab-zed-complete '^[b' backward-word '^[f' forward-word \
+    if has fzf; then
+        for k w in '^R' fzf-history-widget '^T' fzf-file-widget '^[c' fzf-cd-widget; do
+            check "bind $k" "$r[bind:$k]" $w
+        done
+        check "function fzf-history-widget" "$r[fn:fzf-history-widget]" 1
+        is-at-least 0.48 ${r[fzf-version]:-0} && pass "fzf $r[fzf-version] supports --zsh" \
+            || fail "fzf supports --zsh" "version '$r[fzf-version]'"
+    else
+        print -r -- "  skip  fzf bindings (fzf not installed on this target)"
+    fi
+    for k w in '^O' cd_config '^I' fzf-tab-zed-complete '^[b' backward-word '^[f' forward-word \
                '^A' beginning-of-line '^E' end-of-line '^[[1;3D' backward-word '^[[1;3C' forward-word \
                '^[[1;5D' backward-word '^[[1;5C' forward-word '^H' backward-kill-word \
                '^[^?' backward-kill-word '^U' kill-whole-line \
@@ -217,7 +226,7 @@ for host in ${hosts:-local}; do
         || fail "no history-search-multi-word"
     # colored: OMZP::colored-man-pages; ofd: OMZP::macos, which loads only on macOS
     for k w in p10k 1 fzf-tab-complete 1 _zsh_autosuggest_start 1 _zsh_highlight 1 colored 1 \
-               fzf-history-widget 1 ofd $darwin; do
+               ofd $darwin; do
         check "function $k" "$r[fn:$k]" $w
     done
     (( ${r[list-colors]:-0} > 10 )) && pass "completion list-colors ($r[list-colors])" \
@@ -261,8 +270,6 @@ for host in ${hosts:-local}; do
     [[ $r[env:TMPDIR] != */.cache/tmp ]] && pass "TMPDIR left to the system" || fail "TMPDIR left to the system" "$r[env:TMPDIR]"
     check "no duplicate PATH entries" "$r[path-dups]" 0
     check "direnv hooked once where installed" "$r[direnv-hooks]" $(has direnv && print 1 || print 0)
-    is-at-least 0.48 ${r[fzf-version]:-0} && pass "fzf $r[fzf-version] supports --zsh" \
-        || fail "fzf supports --zsh" "version '$r[fzf-version]'"
     print -r -- "  info  COLORTERM=$r[env:COLORTERM] TERM=$r[env:TERM] LANG=$r[env:LANG] XDG_RUNTIME_DIR=$r[env:XDG_RUNTIME_DIR]"
     w=; for k in ${(o)r[(I)cmd:*]}; do [[ -n $r[$k] ]] || w+=" ${k#cmd:}"; done
     print -r -- "  info  not installed:${w:- none}"
