@@ -5,5 +5,12 @@ fif() {
         return 1
     fi
     local file
-    file="$(rga --max-count=1 --ignore-case --files-with-matches --no-messages "$*" | fzf-tmux +m --preview="rga --ignore-case --pretty --context 10 '"$*"' {}")" && echo "opening $file" && open "$file" || return 1
+    file="$(rga --max-count=1 --ignore-case --files-with-matches --no-messages "$*" | fzf-tmux +m --preview="rga --ignore-case --pretty --context 10 '"$*"' {}")" || return 1
+    echo "opening $file"
+    # open on the Mac (and through OrbStack's proxy); $EDITOR on headless hosts
+    if (( $+commands[open] )); then
+        open "$file"
+    else
+        ${=EDITOR:-nano} "$file"
+    fi
 }

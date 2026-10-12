@@ -24,8 +24,9 @@ zinit ice depth=1
 zinit light romkatv/powerlevel10k
 
 # --- LS_COLORS --- #
-alias dircolors='gdircolors'
-zinit ice atclone"gdircolors -b LS_COLORS > clrs.zsh" \
+# coreutils' dircolors is called gdircolors under Homebrew
+(( ! $+commands[gdircolors] )) || alias dircolors='gdircolors'
+zinit ice atclone"${${commands[gdircolors]:+gdircolors}:-dircolors} -b LS_COLORS > clrs.zsh" \
     atpull'%atclone' pick"clrs.zsh" nocompile'!' \
     atload'zstyle ":completion:*" list-colors "${(s.:.)LS_COLORS}"'
 zinit light trapd00r/LS_COLORS
@@ -38,6 +39,7 @@ zinit wait lucid for \
     zdharma-continuum/fast-syntax-highlighting \
     atclone"_fix-omz-plugin" \
     OMZP::colored-man-pages \
+    if'[[ $OSTYPE == darwin* ]]' \
     OMZP::macos \
     blockf \
     zsh-users/zsh-completions \
@@ -47,10 +49,7 @@ zinit wait lucid for \
 zinit ice wait lucid atload'source $ZSH_CONFIG_DIR/lib/fzf-tab-icons.zsh; source $ZSH_CONFIG_DIR/lib/fzf-tab-zed.zsh'
 zinit light Aloxaf/fzf-tab
 
-zinit ice wait lucid
-zinit load zdharma-continuum/history-search-multi-word
-
-zstyle :plugin:history-search-multi-word reset-prompt-protect 1
+# ^R is fzf's history search (conf.d/fzf.zsh)
 
 # Config p10k if not already configured
 [[ ! -f $ZSH_CONFIG_DIR/.p10k_config.zsh ]] || source $ZSH_CONFIG_DIR/.p10k_config.zsh

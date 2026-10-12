@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 
-export PATH="/opt/homebrew/bin:$PATH"
+# Homebrew's op and sshpass (macOS); on Linux they're already on PATH
+[[ ! -d /opt/homebrew/bin ]] || path=(/opt/homebrew/bin $path)
 
 # Reuse an existing multiplexed connection: no token needed
 if ssh -O check stampede3 &>/dev/null; then

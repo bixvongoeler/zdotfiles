@@ -1,3 +1,7 @@
 zedit() {
-    /opt/homebrew/bin/zed-preview $1
+    if (( $+commands[zed-preview] )); then
+        zed-preview "$@"
+    else
+        ${=EDITOR:-nano} "$@"
+    fi
 }
